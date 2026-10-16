@@ -1,4 +1,4 @@
-//go:build scheduler.tasks && arm && !cortexm && !avr && !xtensa && !tinygo.riscv
+//go:build scheduler.tasks && arm && !cortexm && !avr && !xtensa && !tinygo.riscv && !nintendo3ds
 
 package task
 

@@ -37,10 +37,24 @@ Launcher, or open it in the Azahar emulator.
   format runs devkitPro's `3dsxtool`.
 - The CPU is the ARM11 MPCore (ARMv6K, VFPv2, hard-float ABI), the same as the
   one devkitARM builds for.
+- Goroutines use the `tasks` scheduler. The task switch
+  (`src/internal/task/task_stack_nintendo3ds.S`) also saves d8-d15, which the
+  hard-float ABI keeps across calls.
+- Random numbers (`crypto/rand`, the runtime's seed, `hash/maphash`) come from
+  the system's ps service (`PS_GenerateRandomBytes`).
+
+## Tests
+
+`tinygo test -target=nintendo3ds -c -o tests.3dsx ./package` builds a test
+program; it prints its results to the debug log, which the Azahar emulator
+shows. To pass flags, set them at build time:
+`-ldflags="-X runtime.osArgs=-test.v"`.
 
 ## Not yet
 
-- Goroutines (`scheduler` is `none`).
+- Files: `os` has no file system yet (like on the Switch), although newlib can
+  reach the SD card. `os.ReadFile`, `os.WriteFile` and `t.TempDir` fail.
 - Only the main thread; no use of the second core.
 - Errno values are Linux's, not newlib's, for anything above the common ones.
-- A random number source.
+- Collection pauses are long: the conservative collector scans and sweeps the
+  whole heap (up to 64 MB) every cycle.

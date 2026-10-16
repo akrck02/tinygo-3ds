@@ -139,8 +139,26 @@ func exit(code int) {
 	}
 }
 
+// Go runs on a single thread and is never preempted, so nothing can move it to another
+// processor while sync/atomic works.
+//
+//go:linkname procPin sync/atomic.runtime_procPin
+func procPin() {
+}
+
+//go:linkname procUnpin sync/atomic.runtime_procUnpin
+func procUnpin() {
+}
+
+//go:linkname syscall_Exit syscall.Exit
+func syscall_Exit(code int) {
+	exit(code)
+}
+
+// hardwareRand asks the system's ps service, the same source crypto/rand uses.
 func hardwareRand() (n uint64, ok bool) {
-	return 0, false
+	ok = tinygo_nintendo3ds_random(unsafe.Pointer(&n), 8) == 0
+	return
 }
 
 func libc_errno_location() *int32 {
@@ -166,6 +184,9 @@ func findGlobals(found func(start, end uintptr)) {
 
 //export tinygo_nintendo3ds_system_tick
 func tinygo_nintendo3ds_system_tick() uint64
+
+//export tinygo_nintendo3ds_random
+func tinygo_nintendo3ds_random(buffer unsafe.Pointer, size uint32) int32
 
 //export svcSleepThread
 func svcSleepThread(nanoseconds int64)

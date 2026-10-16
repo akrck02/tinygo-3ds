@@ -3,7 +3,7 @@
   "cpu": "mpcore",
   "features": "+armv6k,+dsp,+fp64,+strict-align,+vfp2,+vfp2sp,-thumb-mode",
   "build-tags": ["nintendo3ds", "arm"],
-  "scheduler": "none",
+  "scheduler": "tasks",
   "goos": "linux",
   "goarch": "arm",
   "linker": "ld.lld",
@@ -43,6 +43,7 @@
   "linkerscript": "targets/nintendo3ds.ld",
   "extra-files": [
     "src/runtime/asm_arm.S",
+    "src/internal/task/task_stack_nintendo3ds.S",
     "src/runtime/runtime_nintendo3ds.c"
   ]
 }
