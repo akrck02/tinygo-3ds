@@ -150,6 +150,15 @@ SECTIONS
 		KEEP (*(.dtors))
 	} : data
 
+	/* GNU ld puts the GOT here by itself; ld.lld would place it as an orphan
+	   after __bss_start__, where 3dsx_crt0 clears it, losing the offsets of
+	   libctru's thread-local variables. */
+	.got ALIGN(4) :
+	{
+		*(.got.plt)
+		*(.got)
+	} : data
+
 	__bss_start__ = .;
 	.bss ALIGN(8) :
 	{
