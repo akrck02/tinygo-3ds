@@ -1091,6 +1091,12 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 		if err != nil {
 			return result, err
 		}
+	case "3dsx":
+		result.Binary = filepath.Join(tmpdir, "main"+outext)
+		err := makeNintendo3DSProgram(result.Executable, result.Binary)
+		if err != nil {
+			return result, err
+		}
 	case "nrf-dfu":
 		// special format for nrfutil for Nordic chips
 		result.Binary = filepath.Join(tmpdir, "main"+outext)

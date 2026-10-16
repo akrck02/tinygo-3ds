@@ -1,4 +1,4 @@
-//go:build baremetal || js || wasm_unknown || nintendoswitch
+//go:build baremetal || js || wasm_unknown || nintendoswitch || nintendo3ds
 
 package runtime
 

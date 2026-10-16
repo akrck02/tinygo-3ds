@@ -1,4 +1,4 @@
-//go:build gc.leaking && !baremetal && !nintendoswitch
+//go:build gc.leaking && !baremetal && !nintendoswitch && !nintendo3ds
 
 package runtime
 

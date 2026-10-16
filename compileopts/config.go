@@ -531,6 +531,10 @@ func (c *Config) BinaryFormat(ext string) string {
 		// More information:
 		// https://github.com/Microsoft/uf2
 		return "uf2"
+	case ".3dsx":
+		// Homebrew program for the Nintendo 3DS, made from the ELF file by
+		// devkitPro's 3dsxtool.
+		return "3dsx"
 	case ".zip":
 		if c.Target.BinaryFormat != "" {
 			return c.Target.BinaryFormat

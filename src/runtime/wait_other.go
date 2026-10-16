@@ -1,4 +1,4 @@
-//go:build !tinygo.riscv && !cortexm && !(linux && !baremetal && !tinygo.wasm && !nintendoswitch) && !darwin && !wasip1 && !uefi
+//go:build !tinygo.riscv && !cortexm && !(linux && !baremetal && !tinygo.wasm && !nintendoswitch && !nintendo3ds) && !darwin && !wasip1 && !uefi
 
 package runtime
 

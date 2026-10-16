@@ -1,4 +1,4 @@
-//go:build linux && !baremetal && !nintendoswitch && !wasip1 && !wasm_unknown && !wasip2
+//go:build linux && !baremetal && !nintendoswitch && !nintendo3ds && !wasip1 && !wasm_unknown && !wasip2
 
 package runtime
 

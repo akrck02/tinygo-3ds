@@ -1,0 +1,48 @@
+{
+  "llvm-target": "armv6k-unknown-none-eabihf",
+  "cpu": "mpcore",
+  "features": "+armv6k,+dsp,+fp64,+strict-align,+vfp2,+vfp2sp,-thumb-mode",
+  "build-tags": ["nintendo3ds", "arm"],
+  "scheduler": "none",
+  "goos": "linux",
+  "goarch": "arm",
+  "linker": "ld.lld",
+  "rtlib": "",
+  "libc": "",
+  "gc": "conservative",
+  "default-stack-size": 16384,
+  "cflags": [
+    "-target", "armv6k-unknown-none-eabihf",
+    "-mcpu=mpcore",
+    "-mfloat-abi=hard",
+    "-mfpu=vfpv2",
+    "-mtp=soft",
+    "-D__3DS__",
+    "-isystem", "/opt/devkitpro/devkitARM/arm-none-eabi/include",
+    "-I/opt/devkitpro/libctru/include",
+    "-Werror",
+    "-fshort-enums",
+    "-fno-exceptions", "-fno-unwind-tables", "-fno-asynchronous-unwind-tables",
+    "-ffunction-sections", "-fdata-sections"
+  ],
+  "ldflags": [
+    "--defsym=__sync_synchronize=__sync_synchronize_dmb",
+    "--emit-relocs",
+    "--gc-sections",
+    "-L/opt/devkitpro/libctru/lib",
+    "-L/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/armv6k/fpu",
+    "-L/opt/devkitpro/devkitARM/arm-none-eabi/lib/armv6k/fpu",
+    "/opt/devkitpro/devkitARM/arm-none-eabi/lib/armv6k/fpu/3dsx_crt0.o",
+    "/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/armv6k/fpu/crti.o",
+    "/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/armv6k/fpu/crtbegin.o",
+    "-lctru", "-lm",
+    "--start-group", "-lgcc", "-lc", "-lsysbase", "--end-group",
+    "/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/armv6k/fpu/crtend.o",
+    "/opt/devkitpro/devkitARM/lib/gcc/arm-none-eabi/16.1.0/armv6k/fpu/crtn.o"
+  ],
+  "linkerscript": "targets/nintendo3ds.ld",
+  "extra-files": [
+    "src/runtime/asm_arm.S",
+    "src/runtime/runtime_nintendo3ds.c"
+  ]
+}

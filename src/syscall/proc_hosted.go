@@ -1,4 +1,4 @@
-//go:build !baremetal && !tinygo.wasm && !nintendoswitch
+//go:build !baremetal && !tinygo.wasm && !nintendoswitch && !nintendo3ds
 
 // This file assumes there is a libc available that runs on a real operating
 // system.

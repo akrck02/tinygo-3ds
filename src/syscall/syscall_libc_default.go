@@ -1,4 +1,4 @@
-//go:build js || nintendoswitch || wasip2 || (wasip1 && !scheduler.tasks && !scheduler.asyncify)
+//go:build js || nintendoswitch || nintendo3ds || wasip2 || (wasip1 && !scheduler.tasks && !scheduler.asyncify)
 
 package syscall
 

@@ -34,6 +34,7 @@ func TestClangAttributes(t *testing.T) {
 		"fe310",
 		"gameboy-advance",
 		"k210",
+		"nintendo3ds",
 		"nintendoswitch",
 		"riscv-qemu",
 		"tkey",
