@@ -9,7 +9,7 @@
   "linker": "ld.lld",
   "rtlib": "",
   "libc": "",
-  "gc": "conservative",
+  "gc": "precise",
   "default-stack-size": 16384,
   "cflags": [
     "-target", "armv6k-unknown-none-eabihf",

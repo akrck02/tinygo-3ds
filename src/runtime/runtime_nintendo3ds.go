@@ -22,9 +22,15 @@ const millisecondsFrom1900To1970 = 2208988800 * 1000
 // that malloc can give is used, halving from the largest; the rest of the memory stays for C
 // code, such as libctru and citro3d.
 const (
-	largestHeapSize  = 64 * 1024 * 1024
-	smallestHeapSize = 1 * 1024 * 1024
+	defaultHeapMegabytes = 64
+	smallestHeapSize     = 1 * 1024 * 1024
 )
+
+// heapMegabytes, when set at build time, replaces the largest heap size: a smaller heap makes
+// shorter collection pauses, since the collector sweeps all of it every cycle.
+//
+//	tinygo build -target=nintendo3ds -ldflags="-X runtime.heapMegabytes=32" ...
+var heapMegabytes string
 
 var heapStart, heapEnd uintptr
 
@@ -44,7 +50,7 @@ func main() int32 {
 }
 
 func setupHeap() {
-	for size := uintptr(largestHeapSize); size >= smallestHeapSize; size /= 2 {
+	for size := largestHeapSize(); size >= smallestHeapSize; size /= 2 {
 		block := libc_malloc(size)
 		if block != nil {
 			heapStart = uintptr(block)
@@ -53,6 +59,21 @@ func setupHeap() {
 		}
 	}
 	runtimePanic("cannot reserve memory for the heap")
+}
+
+func largestHeapSize() uintptr {
+	megabytes := uintptr(0)
+	for index := 0; index < len(heapMegabytes); index++ {
+		digit := heapMegabytes[index]
+		if digit < '0' || digit > '9' {
+			return defaultHeapMegabytes * 1024 * 1024
+		}
+		megabytes = megabytes*10 + uintptr(digit-'0')
+	}
+	if megabytes == 0 {
+		megabytes = defaultHeapMegabytes
+	}
+	return megabytes * 1024 * 1024
 }
 
 // growHeap tries to grow the heap size. The heap is a single block, so it cannot grow.

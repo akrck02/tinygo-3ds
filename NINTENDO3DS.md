@@ -56,5 +56,7 @@ shows. To pass flags, set them at build time:
   reach the SD card. `os.ReadFile`, `os.WriteFile` and `t.TempDir` fail.
 - Only the main thread; no use of the second core.
 - Errno values are Linux's, not newlib's, for anything above the common ones.
-- Collection pauses are long: the conservative collector scans and sweeps the
-  whole heap (up to 64 MB) every cycle.
+- Collection pauses are long (hundreds of milliseconds with about 10 MB alive).
+  The target uses the `precise` collector, which skips blocks without pointers
+  (such as mesh data), and a smaller heap shortens the sweep:
+  `-ldflags="-X runtime.heapMegabytes=32"`.
