@@ -1644,7 +1644,7 @@ func makeInt(flags valueFlags, bits uint64, t *RawType) Value {
 
 	ptr := unsafe.Pointer(&v.value)
 	if size > unsafe.Sizeof(uintptr(0)) {
-		ptr = alloc(size, nil)
+		ptr = alloc(size, t.gcLayout())
 		v.value = ptr
 	}
 
@@ -1671,7 +1671,7 @@ func makeFloat(flags valueFlags, f float64, t *RawType) Value {
 
 	ptr := unsafe.Pointer(&v.value)
 	if size > unsafe.Sizeof(uintptr(0)) {
-		ptr = alloc(size, nil)
+		ptr = alloc(size, t.gcLayout())
 		v.value = ptr
 	}
 
@@ -1703,7 +1703,7 @@ func makeComplex(flags valueFlags, f complex128, t *RawType) Value {
 
 	ptr := unsafe.Pointer(&v.value)
 	if size > unsafe.Sizeof(uintptr(0)) {
-		ptr = alloc(size, nil)
+		ptr = alloc(size, t.gcLayout())
 		v.value = ptr
 	}
 
@@ -1834,7 +1834,7 @@ func Zero(typ Type) Value {
 
 	return Value{
 		typecode: typ.(*RawType),
-		value:    alloc(size, nil),
+		value:    alloc(size, typ.(*RawType).gcLayout()),
 		flags:    valueFlagExported | valueFlagRO,
 	}
 }
@@ -1844,7 +1844,7 @@ func Zero(typ Type) Value {
 func New(typ Type) Value {
 	return Value{
 		typecode: pointerTo(typ.(*RawType)),
-		value:    alloc(typ.Size(), nil),
+		value:    alloc(typ.Size(), typ.(*RawType).gcLayout()),
 		flags:    valueFlagExported,
 	}
 }

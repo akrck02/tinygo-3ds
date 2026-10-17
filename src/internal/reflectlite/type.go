@@ -731,7 +731,10 @@ func (t *RawType) Align() int {
 func (r *RawType) gcLayout() unsafe.Pointer {
 	kind := r.Kind()
 
-	if kind < String {
+	if kind < String || !r.mayHavePointers() {
+		// Numbers, and arrays and structs of them: nothing in them is scanned. Scanning them
+		// conservatively would take numbers for pointers (on 32-bit systems, half of a float64
+		// often falls inside the heap) and keep garbage alive.
 		return gclayout.NoPtrs.AsPtr()
 	}
 
@@ -742,10 +745,32 @@ func (r *RawType) gcLayout() unsafe.Pointer {
 		return gclayout.String.AsPtr()
 	case Slice:
 		return gclayout.Slice.AsPtr()
+	case Interface:
+		// A type code and a value, both possibly pointers: the one-pointer layout repeats.
+		return gclayout.Pointer.AsPtr()
 	}
 
 	// Unknown (for now); let the conservative pointer scanning handle it
 	return nil
+}
+
+// mayHavePointers tells whether a value of the type can hold a pointer.
+func (r *RawType) mayHavePointers() bool {
+	switch kind := r.Kind(); {
+	case kind < String:
+		return false
+	case kind == Array:
+		return r.Len() > 0 && r.elem().mayHavePointers()
+	case kind == Struct:
+		for field := range r.NumField() {
+			if r.rawField(field).Type.mayHavePointers() {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
 }
 
 // FieldAlign returns the alignment if this type is used in a struct field. It

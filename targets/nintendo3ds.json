@@ -10,7 +10,7 @@
   "rtlib": "",
   "libc": "",
   "gc": "precise",
-  "default-stack-size": 16384,
+  "default-stack-size": 131072,
   "cflags": [
     "-target", "armv6k-unknown-none-eabihf",
     "-mcpu=mpcore",

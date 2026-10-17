@@ -2035,6 +2035,11 @@ func (b *builder) createBuiltin(argTypes []types.Type, argValues []llvm.Value, c
 			// min(NaN, number) = NaN
 			// The llvm.minimum.*/llvm.maximum.* intrinsics match this behavior.
 			// Neither Go nor LLVM defines the bit representation of resulting NaNs.
+			if b.archFamily() == "arm" {
+				// LLVM cannot select these intrinsics for 32-bit ARM with VFPv2
+				// (the Nintendo 3DS's ARM11): it fails on a 64-bit compare.
+				return b.createFloatMinMax(callName, llvmType, argValues), nil
+			}
 			prefix = "llvm."
 			delimeter = "imum."
 		}

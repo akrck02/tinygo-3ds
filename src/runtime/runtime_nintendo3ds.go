@@ -18,16 +18,17 @@ const systemTickFrequency = 268111856
 // later.
 const millisecondsFrom1900To1970 = 2208988800 * 1000
 
-// The heap is one block taken from newlib's malloc when the program starts. The first size
-// that malloc can give is used, halving from the largest; the rest of the memory stays for C
-// code, such as libctru and citro3d.
+// The heap is one block taken from newlib's malloc when the program starts: as large as the console
+// gives (going down from the largest size asked for), less a few megabytes left for C code, such as
+// libctru and citro3d, which allocate with malloc too.
 const (
-	defaultHeapMegabytes = 64
+	defaultHeapMegabytes = 256 // more than any 3DS has: take what there is
 	smallestHeapSize     = 1 * 1024 * 1024
+	leftForC             = 8 * 1024 * 1024
 )
 
-// heapMegabytes, when set at build time, replaces the largest heap size: a smaller heap makes
-// shorter collection pauses, since the collector sweeps all of it every cycle.
+// heapMegabytes, when set at build time, caps the heap: a smaller heap makes shorter collection
+// pauses, since the collector sweeps all of it every cycle.
 //
 //	tinygo build -target=nintendo3ds -ldflags="-X runtime.heapMegabytes=32" ...
 var heapMegabytes string
@@ -50,15 +51,30 @@ func main() int32 {
 }
 
 func setupHeap() {
-	for size := largestHeapSize(); size >= smallestHeapSize; size /= 2 {
-		block := libc_malloc(size)
-		if block != nil {
-			heapStart = uintptr(block)
-			heapEnd = heapStart + size
-			return
+	// The block for C is taken first and given back last, so it sits below the heap: freed at the
+	// top, newlib would try to shrink its memory, which libctru does not do.
+	forC := libc_malloc(leftForC)
+	size, block := largestBlock()
+	if block == nil {
+		runtimePanic("cannot reserve memory for the heap")
+	}
+	if forC != nil {
+		libc_free(forC)
+	}
+	heapStart = uintptr(block)
+	heapEnd = heapStart + size
+}
+
+// largestBlock takes the largest block malloc gives, up to the size asked for, found going down in
+// steps of a few megabytes, not halving: the console's free memory is seldom a power of two.
+func largestBlock() (uintptr, unsafe.Pointer) {
+	const step = 4 * 1024 * 1024
+	for size := largestHeapSize(); size >= smallestHeapSize; size -= min(step, size/2) {
+		if block := libc_malloc(size); block != nil {
+			return size, block
 		}
 	}
-	runtimePanic("cannot reserve memory for the heap")
+	return 0, nil
 }
 
 func largestHeapSize() uintptr {
@@ -220,6 +236,9 @@ func osGetTime() uint64
 
 //export malloc
 func libc_malloc(size uintptr) unsafe.Pointer
+
+//export free
+func libc_free(block unsafe.Pointer)
 
 //export write
 func libc_write(fd int32, buffer *byte, count int) int
