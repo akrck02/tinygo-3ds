@@ -264,44 +264,153 @@ func insertFreeRange(ptr unsafe.Pointer, len uintptr) {
 	}
 }
 
+// Large and small objects are kept apart, so the small ones a program makes and drops all the time
+// do not cut up the room the large ones need: a large object (largeObjectBlocks or more) is taken
+// from the highest free range, at its end, and a small one as low as it fits (see smallFrontier).
+// Without this, a heap that does not move what it holds ends up in small pieces, and a large allocation fails with plenty free in all.
+const (
+	largeObjectBlocks = 4096 // 64 KiB with 16-byte blocks
+	smallObjectTiers  = 16   // how finely "as low as it fits" looks: in sixteenths of the heap
+)
+
 // popFreeRange removes a range of len blocks from the freeRanges list.
 // It returns nil if there are no sufficiently long ranges.
 func popFreeRange(len uintptr) unsafe.Pointer {
 	if gcAsserts && len == 0 {
 		runtimeFatal("gc: pop 0-length free range")
 	}
-
-	// Find the removal point by length.
-	// Skip until the next range is at least the target length.
-	remDst := &freeRanges
-	for *remDst != nil && (*remDst).len < len {
-		remDst = &(*remDst).nextLen
+	if len >= largeObjectBlocks {
+		return popHighestFreeRange(len)
 	}
+	return popLowFreeRange(len)
+}
 
-	rangeWithLength := *remDst
-	if rangeWithLength == nil {
-		// No ranges are long enough.
+// smallFrontier is how high in the heap small objects go for now: they take the best fitting range
+// below it. After each sweep it goes where there is as much room free below it as the small
+// objects that live take (a quarter of the heap at least), and when nothing below it fits, the
+// collector runs first (collectBeforeRising) before it rises: the small
+// objects that live through a collection then stay packed at the bottom of the heap, instead of
+// being left all over it among the garbage of before, cutting up the room the large ones need.
+var (
+	smallFrontier       uintptr
+	smallLive           uintptr // blocks the small objects held after the last sweep
+	collectBeforeRising bool
+)
+
+// popLowFreeRange takes the best fitting range that starts below smallFrontier, raising the
+// frontier as little as it can when there is none.
+func popLowFreeRange(len uintptr) unsafe.Pointer {
+	tierSize := (uintptr(metadataStart) - heapStart) / smallObjectTiers
+	if smallFrontier == 0 {
+		// The frontier goes where, from the bottom of the heap, there is room free for as much as
+		// the small objects that live take.
+		room := smallLive
+		if room < 4*tierSize/bytesPerBlock {
+			room = 4 * tierSize / bytesPerBlock // a collection takes long: not more often than every quarter of the heap
+		}
+		block := gcBlock(0)
+		for ; block < endBlock && room > 0; block++ {
+			if block.state() == blockStateFree {
+				room--
+			}
+		}
+		smallFrontier = block.address()
+	}
+	var lowest unsafe.Pointer
+	var lowestLen uintptr
+	for lengths := freeRanges; lengths != nil; lengths = lengths.nextLen {
+		if lengths.len < len {
+			continue
+		}
+		start := unsafe.Pointer(lengths)
+		more := lengths.nextWithLen
+		for {
+			if uintptr(start) < smallFrontier {
+				return takeFreeRange(start, lengths.len, len, false)
+			}
+			if lowest == nil || uintptr(start) < uintptr(lowest) {
+				lowest, lowestLen = start, lengths.len
+			}
+			if more == nil {
+				break
+			}
+			start, more = unsafe.Pointer(more), more.next
+		}
+	}
+	if lowest == nil || collectBeforeRising {
 		return nil
 	}
-	removedLen := rangeWithLength.len
+	smallFrontier = heapStart + ((uintptr(lowest)-heapStart)/tierSize+1)*tierSize
+	return takeFreeRange(lowest, lowestLen, len, false)
+}
 
-	// Remove the range.
-	var ptr unsafe.Pointer
-	if nextWithLen := rangeWithLength.nextWithLen; nextWithLen != nil {
-		// Remove from the list with this length.
-		rangeWithLength.nextWithLen = nextWithLen.next
-		ptr = unsafe.Pointer(nextWithLen)
-	} else {
-		// Remove from the list of lengths.
-		*remDst = rangeWithLength.nextLen
-		ptr = unsafe.Pointer(rangeWithLength)
+// popHighestFreeRange takes len blocks from the end of the free range that ends highest.
+func popHighestFreeRange(len uintptr) unsafe.Pointer {
+	var best unsafe.Pointer
+	var bestLen, bestEnd uintptr
+	consider := func(start unsafe.Pointer, rangeLen uintptr) {
+		if end := uintptr(start) + rangeLen*bytesPerBlock; end > bestEnd {
+			best, bestLen, bestEnd = start, rangeLen, end
+		}
 	}
+	for lengths := freeRanges; lengths != nil; lengths = lengths.nextLen {
+		if lengths.len < len {
+			continue
+		}
+		consider(unsafe.Pointer(lengths), lengths.len)
+		for more := lengths.nextWithLen; more != nil; more = more.next {
+			consider(unsafe.Pointer(more), lengths.len)
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	return takeFreeRange(best, bestLen, len, true)
+}
 
-	if removedLen > len {
-		// Insert the leftover range.
-		insertFreeRange(unsafe.Add(ptr, len*bytesPerBlock), removedLen-len)
+// takeFreeRange removes the free range at start (rangeLen blocks long) from the lists and returns
+// len blocks of it, from its start or, fromEnd, its end; what is left goes back in the lists.
+func takeFreeRange(start unsafe.Pointer, rangeLen, len uintptr, fromEnd bool) unsafe.Pointer {
+	removeFreeRange(start, rangeLen)
+	if rangeLen == len {
+		return start
 	}
-	return ptr
+	if fromEnd {
+		insertFreeRange(start, rangeLen-len)
+		return unsafe.Add(start, (rangeLen-len)*bytesPerBlock)
+	}
+	insertFreeRange(unsafe.Add(start, len*bytesPerBlock), rangeLen-len)
+	return start
+}
+
+// removeFreeRange takes the free range at start, rangeLen blocks long, out of the lists.
+func removeFreeRange(start unsafe.Pointer, rangeLen uintptr) {
+	lengthSlot := &freeRanges
+	for *lengthSlot != nil && (*lengthSlot).len != rangeLen {
+		lengthSlot = &(*lengthSlot).nextLen
+	}
+	lengths := *lengthSlot
+	if lengths == nil {
+		runtimeFatal("gc: free range not found")
+	}
+	if unsafe.Pointer(lengths) != start {
+		for moreSlot := &lengths.nextWithLen; *moreSlot != nil; moreSlot = &(*moreSlot).next {
+			if unsafe.Pointer(*moreSlot) == start {
+				*moreSlot = (*moreSlot).next
+				return
+			}
+		}
+		runtimeFatal("gc: free range not found")
+	}
+	// The range heads its length's list: the next of the same length takes its place.
+	if more := lengths.nextWithLen; more != nil {
+		promoted := (*freeRange)(unsafe.Pointer(more))
+		rest := more.next
+		*promoted = freeRange{len: rangeLen, nextLen: lengths.nextLen, nextWithLen: rest}
+		*lengthSlot = promoted
+		return
+	}
+	*lengthSlot = lengths.nextLen
 }
 
 func isOnHeap(ptr uintptr) bool {
@@ -435,6 +544,7 @@ func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
 	var grewHeap bool
 	var pointer unsafe.Pointer
 	for {
+		collectBeforeRising = !ranGC
 		pointer = popFreeRange(neededBlocks)
 		if pointer != nil {
 			break
@@ -731,6 +841,8 @@ func markRoot(addr, root uintptr) {
 func sweep() uintptr {
 	// Discard the old free ranges list.
 	freeRanges = nil
+	smallFrontier = 0
+	smallLive = 0
 
 	// Scan backwards through the block metadata.
 	block := endBlock
@@ -760,8 +872,12 @@ func sweep() uintptr {
 		block.unmark()
 
 		// Skip the tail.
+		objectEnd := block + 1
 		for block > 0 && (block-1).state() == blockStateTail {
 			block--
+		}
+		if blocks := uintptr(objectEnd - block); blocks < largeObjectBlocks {
+			smallLive += blocks
 		}
 	}
 
