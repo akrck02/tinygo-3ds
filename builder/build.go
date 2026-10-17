@@ -1248,6 +1248,12 @@ func optimizeProgram(mod llvm.Module, config *compileopts.Config) error {
 		return errors.New("verification failure after LLVM optimization passes")
 	}
 
+	// The Nintendo 3DS's linker script keeps large globals without pointers apart from the data
+	// the collector scans: there, embedded files would be scanned word by word every cycle.
+	if slices.Contains(config.BuildTags(), "nintendo3ds") {
+		transform.MovePointerFreeGlobals(mod)
+	}
+
 	return nil
 }
 

@@ -76,6 +76,16 @@ SECTIONS
 
 	. = ALIGN(0x1000);
 
+	/* Large globals without pointers (embedded files, tables): writable, but left out of what
+	   the garbage collector scans, which starts at __noptrdata_end__. */
+	.noptrdata :
+	{
+		*(.noptrdata)
+		*(.noptrdata.*)
+		. = ALIGN(8);
+	} : data
+	__noptrdata_end__ = .;
+
 	.data :
 	{
 		*(.data)

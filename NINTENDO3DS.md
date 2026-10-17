@@ -71,7 +71,11 @@ large buffers and reuse them, and keep the data a program reads small.
   reach the SD card. `os.ReadFile`, `os.WriteFile` and `t.TempDir` fail.
 - Only the main thread; no use of the second core.
 - Errno values are Linux's, not newlib's, for anything above the common ones.
-- Collection pauses are long (hundreds of milliseconds with about 10 MB alive).
-  The target uses the `precise` collector, which skips blocks without pointers
-  (such as mesh data), and a smaller heap shortens the sweep:
+- Collections stop the program: about 170 ms in the emulator for a program with
+  an 80 MB heap and 30 MB alive. The target uses the `precise` collector, which
+  skips blocks without pointers (such as mesh data). Large globals without
+  pointers (embedded files, fonts) go to a `.noptrdata` section the collector
+  does not scan: scanned word by word, their bytes looked like pointers into
+  large objects, and following them took seconds. The sweep frees four blocks
+  at once where it can. A smaller heap still shortens it:
   `-ldflags="-X runtime.heapMegabytes=32"`.

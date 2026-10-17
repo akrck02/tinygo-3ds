@@ -205,18 +205,16 @@ func libc_errno_location() *int32 {
 //go:extern __start__
 var imageStartSymbol [0]byte
 
-//go:extern __exidx_end
-var readOnlyEndSymbol [0]byte
+//go:extern __noptrdata_end__
+var pointerFreeEndSymbol [0]byte
 
 //go:extern __end__
 var imageEndSymbol [0]byte
 
-// findGlobals scans the data and bss segments. devkitARM's linker script names no symbol at the
-// start of .data, but places it at the first page after the read-only data ends.
+// findGlobals scans the data and bss segments, after the large globals that hold no pointers
+// (the linker script's .noptrdata, which starts the data segment): embedded files need no scan.
 func findGlobals(found func(start, end uintptr)) {
-	const pageSize = 0x1000
-	dataStart := (uintptr(unsafe.Pointer(&readOnlyEndSymbol)) + pageSize - 1) &^ (pageSize - 1)
-	found(dataStart, uintptr(unsafe.Pointer(&imageEndSymbol)))
+	found(uintptr(unsafe.Pointer(&pointerFreeEndSymbol)), uintptr(unsafe.Pointer(&imageEndSymbol)))
 }
 
 //export tinygo_nintendo3ds_system_tick

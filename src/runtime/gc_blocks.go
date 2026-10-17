@@ -131,6 +131,25 @@ func (b gcBlock) address() uintptr {
 // findHead returns the head (last block) of an object, assuming the block
 // points to an allocated object. It returns the same block if this block
 // already points to the head.
+// stateBytesAllTails is four state bytes of tail blocks, read as one word.
+const stateBytesAllTails = uint32(blockStateByteAllTails) * 0x01010101
+
+// skipTailWords moves b, at the start of a state byte, past every aligned word of four state
+// bytes that holds only tail blocks, without reading past the metadata.
+func skipTailWords(b gcBlock) gcBlock {
+	metadataBytes := uintptr(endBlock+blocksPerStateByte-1) / blocksPerStateByte
+	for {
+		index := uintptr(b) / blocksPerStateByte
+		if (uintptr(metadataStart)+index)%4 != 0 || index+4 > metadataBytes {
+			return b
+		}
+		if *(*uint32)(unsafe.Add(metadataStart, index)) != stateBytesAllTails {
+			return b
+		}
+		b += 4 * blocksPerStateByte
+	}
+}
+
 func (b gcBlock) findHead() gcBlock {
 	for {
 		// Optimization: check whether the current block state byte (which
@@ -142,6 +161,8 @@ func (b gcBlock) findHead() gcBlock {
 		stateByte := b.stateByte()
 		if stateByte == blockStateByteAllTails {
 			b += blocksPerStateByte - (b % blocksPerStateByte)
+			// and then four state bytes at a time while they all are tails, for the largest
+			b = skipTailWords(b)
 			continue
 		}
 
@@ -309,10 +330,20 @@ func popLowFreeRange(len uintptr) unsafe.Pointer {
 			room = 4 * tierSize / bytesPerBlock // a collection takes long: not more often than every quarter of the heap
 		}
 		block := gcBlock(0)
-		for ; block < endBlock && room > 0; block++ {
+		for block < endBlock && room > 0 {
+			if block%blocksPerStateByte == 0 && block+blocksPerStateByte <= endBlock && room >= blocksPerStateByte {
+				if stateByte := block.stateByte(); stateByte == 0 || stateByte == blockStateByteAllTails {
+					if stateByte == 0 {
+						room -= blocksPerStateByte // four free blocks at once
+					}
+					block += blocksPerStateByte
+					continue
+				}
+			}
 			if block.state() == blockStateFree {
 				room--
 			}
+			block++
 		}
 		smallFrontier = block.address()
 	}
@@ -851,7 +882,20 @@ func sweep() uintptr {
 		// Scan backwards until we find a marked head.
 		// Free the blocks as we go.
 		freeEnd := block
-		for block > 0 && (block-1).state() != blockStateMark {
+		for block > 0 {
+			// A whole state byte without a marked head is freed at once: most of a large heap
+			// is free or garbage, and block by block the sweep takes long.
+			if block%blocksPerStateByte == 0 {
+				stateByte := (block - 1).stateByte()
+				if stateByte&(stateByte>>blocksPerStateByte)&blockStateEach == 0 {
+					*(*uint8)(unsafe.Add(metadataStart, (block-1)/blocksPerStateByte)) = 0
+					block -= blocksPerStateByte
+					continue
+				}
+			}
+			if (block - 1).state() == blockStateMark {
+				break
+			}
 			block--
 			block.free()
 		}
@@ -873,7 +917,14 @@ func sweep() uintptr {
 
 		// Skip the tail.
 		objectEnd := block + 1
-		for block > 0 && (block-1).state() == blockStateTail {
+		for block > 0 {
+			if block%blocksPerStateByte == 0 && (block-1).stateByte() == blockStateByteAllTails {
+				block -= blocksPerStateByte // a large object's tail, a state byte at a time
+				continue
+			}
+			if (block - 1).state() != blockStateTail {
+				break
+			}
 			block--
 		}
 		if blocks := uintptr(objectEnd - block); blocks < largeObjectBlocks {
