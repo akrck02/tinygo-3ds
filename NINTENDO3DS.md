@@ -65,6 +65,61 @@ tree alive, and a program that makes and drops many small objects leaves the
 heap in pieces, so a large allocation can fail with plenty free in total. Keep
 large buffers and reuse them, and keep the data a program reads small.
 
+### How the heap is used
+
+- Objects of 64 KiB or more are taken from the top of the heap, small ones from
+  the bottom, below a frontier. When nothing below the frontier fits, the
+  collector runs before the frontier rises, so the small objects that live stay
+  packed at the bottom and the top keeps large holes. A program therefore
+  collects when its small garbage has filled a quarter of the heap (or as much
+  as it keeps alive, if more), not only when the heap is full.
+- Large writable globals without pointers (a `//go:embed` `[]byte`, a font,
+  a table) go to `.noptrdata`, which is not scanned. Everything else in `.data`
+  and `.bss` is scanned word by word on every collection: keep big buffers of
+  numbers out of globals that also hold pointers.
+- `runtime.ReadMemStats` walks the heap's metadata (tens of milliseconds with
+  an 80 MB heap). Read it every second or two, not every frame.
+  `MemStats.PauseTotalNs` and `NumGC` give the collector's pauses and passes.
+
+### What makes garbage in TinyGo that would not in Go
+
+Go's escape analysis keeps much on the stack that TinyGo puts on the heap. In
+code that runs every frame:
+
+- A closure that captures variables puts them on the heap, even when it is only
+  called on a rare path. Look the common case up first and make the closure on
+  the rare path only, in a function of its own.
+- A method value (`thing.Method` as a `func`) is a closure: make it once and
+  keep it.
+- A struct captured by a closure, or passed to a function that keeps it, is
+  copied to the heap: capture the few fields needed, or a pointer.
+- `sort.Slice` and `sort.SliceStable` use reflection and a closure: use
+  `slices.SortFunc` with a function that captures nothing, or skip the sort
+  when the data is in order already.
+- `[]rune(s)`, `strings.ToUpper`, `+` between strings, `strconv` and
+  `time.Format` make a new string each time: keep the result while its input
+  does not change, and count runes with `utf8.RuneCountInString`.
+- A map literal, `make(map…)` or `append` to a fresh slice every frame: keep
+  them in the program's state and empty them with `clear` and `[:0]`.
+- `defer` with a closure allocates; write the cleanup out where it is short.
+
+### Finding where the garbage comes from
+
+Count it. A temporary counter in `alloc` (`gc_blocks.go`), keyed by
+`returnAddress(0)`, with the bytes and the count of each place, printed every
+few megabytes, names the places that allocate; `llvm-symbolizer` turns the
+addresses into lines. Runtime helpers (`sliceAppend`, `stringConcat`,
+`hashmapMake`…) allocate for their caller: have each set a global to its own
+`returnAddress(0)` on entry and count the pair. In one large program five
+places made nine tenths of the garbage, and none was where it was expected.
+
+### The New 3DS's speed
+
+libctru leaves a New 3DS at 268 MHz without its second-level cache unless the
+program calls `osSetSpeedupEnable(true)`; go-renderer's `ctr` does when it
+opens the screen. A program that does not use it should call it itself: it is
+three times the processor.
+
 ## Not yet
 
 - Files: `os` has no file system yet (like on the Switch), although newlib can
