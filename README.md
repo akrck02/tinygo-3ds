@@ -1,3 +1,8 @@
+> **This is an unofficial fork of [TinyGo](https://github.com/tinygo-org/tinygo)** that adds a
+> `nintendo3ds` target (homebrew for the Nintendo 3DS). It is not made, reviewed or endorsed by the
+> TinyGo authors, nor by Nintendo. What the fork adds, how to use it and its licenses are in
+> [NINTENDO3DS.md](NINTENDO3DS.md); everything else below is TinyGo's own README.
+
 # TinyGo - Go compiler for small places
 
 [![Linux](https://github.com/tinygo-org/tinygo/actions/workflows/linux.yml/badge.svg?branch=dev)](https://github.com/tinygo-org/tinygo/actions/workflows/linux.yml) [![macOS](https://github.com/tinygo-org/tinygo/actions/workflows/build-macos.yml/badge.svg?branch=dev)](https://github.com/tinygo-org/tinygo/actions/workflows/build-macos.yml) [![Windows](https://github.com/tinygo-org/tinygo/actions/workflows/windows.yml/badge.svg?branch=dev)](https://github.com/tinygo-org/tinygo/actions/workflows/windows.yml) [![Docker](https://github.com/tinygo-org/tinygo/actions/workflows/docker.yml/badge.svg?branch=dev)](https://github.com/tinygo-org/tinygo/actions/workflows/docker.yml) [![Nix](https://github.com/tinygo-org/tinygo/actions/workflows/nix.yml/badge.svg?branch=dev)](https://github.com/tinygo-org/tinygo/actions/workflows/nix.yml)
