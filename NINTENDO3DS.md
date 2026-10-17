@@ -113,6 +113,14 @@ addresses into lines. Runtime helpers (`sliceAppend`, `stringConcat`,
 `returnAddress(0)` on entry and count the pair. In one large program five
 places made nine tenths of the garbage, and none was where it was expected.
 
+### Math as gc computes it
+
+Elsewhere TinyGo turns `math.Exp`, `math.Log`, `math.Sin` and the rest into LLVM intrinsics, which
+become the C library's functions. newlib's round differently from Go's own, and `math.Pow` is built
+on `Exp` and `Log`: the fourth root of 625 came out 4.9999…, and an Ogg Vorbis decoder that floors
+it read the wrong number of bits. On this target only the operations IEEE rounds exactly (`Sqrt`,
+`Floor`, `Ceil`, `Trunc`) stay intrinsics; the others run Go's code and give what gc gives.
+
 ### The New 3DS's speed
 
 libctru leaves a New 3DS at 268 MHz without its second-level cache unless the

@@ -60,6 +60,11 @@ type Config struct {
 	Debug              bool // Whether to emit debug information in the LLVM module.
 	Nobounds           bool // Whether to skip bounds checks
 	PanicStrategy      string
+
+	// GoMath keeps math's transcendental functions (Exp, Log, Sin…) in Go, instead of LLVM
+	// intrinsics lowered to the C library's, so they give what gc gives: set for targets whose
+	// libm rounds differently (the Nintendo 3DS's newlib).
+	GoMath bool
 }
 
 // compilerContext contains function-independent data that should still be

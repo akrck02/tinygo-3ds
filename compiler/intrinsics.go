@@ -201,6 +201,17 @@ func (b *builder) defineMathOp() bool {
 	if !ok {
 		return false
 	}
+	if b.GoMath {
+		// newlib's exp, log, sin and the rest round differently from Go's own: math.Pow, built on
+		// Exp and Log, gave 4.9999… for the fourth root of 625 on the 3DS, and a decoder that
+		// floors it read the wrong number of bits. Keep the operations IEEE rounds exactly; the
+		// others run Go's code, so a program computes what it does with gc.
+		switch b.fn.Name() {
+		case "Ceil", "Floor", "Sqrt", "Trunc":
+		default:
+			return false
+		}
+	}
 	if strings.HasSuffix(b.Triple, "-wasi") || llvmutil.Version() < 19 {
 		// We don't have a real libc for wasip2. Until that is fixed, we need to
 		// limit math intrinsics on WASI to a subset supported natively in
