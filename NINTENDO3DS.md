@@ -142,3 +142,10 @@ three times the processor.
   large objects, and following them took seconds. The sweep frees four blocks
   at once where it can. A smaller heap still shortens it:
   `-ldflags="-X runtime.heapMegabytes=32"`.
+
+## Licenses
+
+The fork stays under TinyGo's `LICENSE` (BSD-3-Clause); `targets/nintendo3ds.ld`, adapted from
+devkitARM's `3dsx.ld`, stays under the Mozilla Public License 2.0, as its header says. A `.3dsx`
+links TinyGo, the Go standard library, libctru, citro3d and newlib: their notices are in
+[NINTENDO3DS-NOTICES.md](NINTENDO3DS-NOTICES.md), to keep next to any `.3dsx` you share.
