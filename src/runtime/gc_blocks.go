@@ -57,6 +57,7 @@ var (
 	gcTotalAlloc  uint64         // total number of bytes allocated
 	gcMallocs     uint64         // total number of allocations
 	gcNumGC       uint32         // total number of completed collection cycles
+	gcPauseTotal  uint64         // nanoseconds spent collecting, in all
 	gcLock        task.PMutex    // lock to avoid race conditions on multicore systems
 )
 
@@ -698,6 +699,7 @@ func runGC() (freeBytes uintptr) {
 	if gcDebug {
 		println("running collection cycle...")
 	}
+	start := ticks()
 
 	// Mark phase: mark all reachable objects, recursively.
 	gcMarkReachable()
@@ -756,6 +758,7 @@ func runGC() (freeBytes uintptr) {
 	// collections triggered by an allocation are counted too. Every caller
 	// holds gcLock, the same lock ReadMemStats reads it under.
 	gcNumGC++
+	gcPauseTotal += uint64(ticksToNanoseconds(ticks() - start))
 
 	return
 }
@@ -1025,6 +1028,7 @@ func ReadMemStats(m *MemStats) {
 
 	// Record the number of completed collection cycles.
 	m.NumGC = gcNumGC
+	m.PauseTotalNs = gcPauseTotal
 
 	gcLock.Unlock()
 }

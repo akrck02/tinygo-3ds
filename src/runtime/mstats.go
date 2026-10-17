@@ -83,6 +83,10 @@ type MemStats struct {
 	// GCSys is bytes of memory in garbage collection metadata.
 	GCSys uint64
 
+	// PauseTotalNs is the cumulative nanoseconds in GC stop-the-world pauses since the program
+	// started. Only the blocks collector measures it; the others report 0.
+	PauseTotalNs uint64
+
 	// NumGC is the number of completed GC cycles.
 	//
 	// The leaking collector never collects, so it always reports 0.
