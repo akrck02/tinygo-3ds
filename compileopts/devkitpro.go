@@ -12,18 +12,31 @@ import (
 
 // DevkitProFolder is devkitPro's folder: $DEVKITPRO, or where devkitPro installs itself.
 func DevkitProFolder() string {
-	if folder := os.Getenv("DEVKITPRO"); folder != "" {
+	folder := os.Getenv("DEVKITPRO")
+	if runtime.GOOS == "windows" {
+		return windowsFolder(folder)
+	}
+	if folder != "" {
 		return folder
 	}
-	if runtime.GOOS == "windows" {
-		return `C:\devkitPro`
-	}
 	return "/opt/devkitpro"
+}
+
+// windowsFolder is devkitPro's folder on Windows: its installer sets $DEVKITPRO to the MSYS2 path
+// /opt/devkitpro, which a Windows program reads as \opt\devkitpro on the drive it runs from; it is
+// C:\devkitPro.
+func windowsFolder(folder string) string {
+	if folder == "" || strings.HasPrefix(folder, "/opt/devkitpro") {
+		return `C:\devkitPro` + filepath.FromSlash(strings.TrimPrefix(folder, "/opt/devkitpro"))
+	}
+	return folder
 }
 
 // devkitARMGCCFolder is the folder of devkitARM's newest GCC, which holds libgcc and the crt
 // objects: its version changes with devkitARM's updates.
 func devkitARMGCCFolder(devkitPro string) string {
+	// Glob fails only on a bad pattern, which a folder with [ in its name makes: then no GCC is
+	// found, and the link says which folder it looked in.
 	versions, _ := filepath.Glob(filepath.Join(devkitPro, "devkitARM", "lib", "gcc", "arm-none-eabi", "*"))
 	if len(versions) == 0 {
 		return filepath.Join(devkitPro, "devkitARM", "lib", "gcc", "arm-none-eabi", "unknown")

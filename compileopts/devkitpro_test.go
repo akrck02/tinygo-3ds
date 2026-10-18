@@ -21,3 +21,12 @@ func TestDevkitProFoldersComeFromTheEnvironment(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+func TestDevkitProsMSYSPathIsAWindowsFolder(t *testing.T) {
+	cases := map[string]string{"": `C:\devkitPro`, "/opt/devkitpro": `C:\devkitPro`, `D:\tools\devkitPro`: `D:\tools\devkitPro`}
+	for given, want := range cases {
+		if got := windowsFolder(given); got != want {
+			t.Errorf("%q gives %q, want %q", given, got, want)
+		}
+	}
+}
