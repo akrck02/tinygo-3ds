@@ -11,6 +11,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '!v*-3ds.*' # this fork's releases: release-3ds.yml
   workflow_dispatch:
     inputs:
       tag:
