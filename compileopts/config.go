@@ -332,7 +332,7 @@ func (c *Config) DefaultBinaryExtension() string {
 func (c *Config) CFlags(libclang bool) []string {
 	var cflags []string
 	for _, flag := range c.Target.CFlags {
-		cflags = append(cflags, strings.ReplaceAll(flag, "{root}", goenv.Get("TINYGOROOT")))
+		cflags = append(cflags, expandTargetPath(flag))
 	}
 	resourceDir := goenv.ClangResourceDir(libclang)
 	if resourceDir != "" {
@@ -453,7 +453,7 @@ func (c *Config) LDFlags() []string {
 	// Merge and adjust LDFlags.
 	var ldflags []string
 	for _, flag := range c.Target.LDFlags {
-		ldflags = append(ldflags, strings.ReplaceAll(flag, "{root}", root))
+		ldflags = append(ldflags, expandTargetPath(flag))
 	}
 	ldflags = append(ldflags, "-L", root)
 	if c.Target.LinkerScript != "" {

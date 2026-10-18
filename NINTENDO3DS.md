@@ -6,11 +6,14 @@ libctru.
 
 ## What you need
 
-- TinyGo built from this branch (`go install -tags=llvm20 .` against a system
-  LLVM works).
-- devkitPro with the 3DS packages (devkitARM, libctru, 3dstools) in
-  `/opt/devkitpro`. The target's paths assume that location and devkitARM's
-  GCC 16.1.0.
+- TinyGo from this fork: a release (`v0.42.0-3ds.N`, with LLVM inside, built by
+  `.github/workflows/release-3ds.yml` when such a tag is pushed), or built from
+  this branch (`go install -tags=llvm20 .` against a system LLVM works).
+- devkitPro with the 3DS packages (`dkp-pacman -S 3ds-dev`: devkitARM, libctru,
+  citro3d, 3dstools). The target finds it in `$DEVKITPRO`, as devkitPro's own
+  tools do, or in `/opt/devkitpro` (`C:\devkitPro` on Windows) when unset; it
+  takes the newest GCC devkitARM has (`{devkitpro}` and `{devkitarm-gcc}` in
+  `targets/nintendo3ds.json`).
 
 ## Building
 

@@ -1,0 +1,356 @@
+# Build tinygo-3ds for Linux, macOS and Windows and publish the archives as a prerelease, with
+# their SHA-256, when a tag like v0.42.0-3ds.1 is pushed (or by hand). go-engine's editor installs
+# TinyGo for the 3DS from these releases.
+#
+# This fork's own workflow: the upstream ones run TinyGo's whole test suite on every system and
+# release only when all of it passes. Here the release is built as upstream builds it (LLVM inside,
+# STATIC=1 on Linux), and checked by building the 3DS example with devkitPro's own image.
+name: Release for the 3DS
+
+on:
+  push:
+    tags:
+      - 'v*-3ds.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    container:
+      image: golang:1.27-alpine
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Install apk dependencies
+        # tar: needed for actions/cache@v5
+        # git+openssh: needed for checkout (I think?)
+        # ruby: needed to install fpm
+        run: apk add tar git openssh make g++ ruby-dev mold
+      - name: Work around CVE-2022-24765
+        # We're not on a multi-user machine, so this is safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Extract TinyGo version
+        id: version
+        run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
+      - name: Cache Go
+        uses: actions/cache@v5
+        with:
+          key: go-cache-linux-alpine-v2-${{ hashFiles('go.mod') }}
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+      - name: Restore LLVM source cache
+        uses: actions/cache/restore@v5
+        id: cache-llvm-source
+        with:
+          key: llvm-source-22-linux-alpine-v1-${{ hashFiles('llvm-version.txt') }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save LLVM source cache
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore LLVM build cache
+        uses: actions/cache/restore@v5
+        id: cache-llvm-build
+        with:
+          key: llvm-build-22-linux-alpine-v1-${{ hashFiles('llvm-version.txt') }}
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # install dependencies
+          apk add cmake samurai python3
+          # build!
+          make llvm-build
+          # Remove unnecessary object files (to reduce cache size).
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save LLVM build cache
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: Cache Binaryen
+        uses: actions/cache@v5
+        id: cache-binaryen
+        with:
+          key: binaryen-linux-alpine-v3
+          path: build/wasm-opt
+      - name: Build Binaryen
+        if: steps.cache-binaryen.outputs.cache-hit != 'true'
+        run: |
+          apk add cmake samurai python3
+          make binaryen STATIC=1
+      - name: Build TinyGo release
+        run: |
+          make release -j3 STATIC=1
+          cp -p build/release.tar.gz /tmp/tinygo${{ steps.version.outputs.version }}.linux-amd64.tar.gz
+      - name: Publish release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinygo${{ steps.version.outputs.version }}.linux-amd64.tar.gz
+          path: /tmp/tinygo${{ steps.version.outputs.version }}.linux-amd64.tar.gz
+          archive: false
+
+  check-3ds:
+    # The Linux release, in devkitPro's image, builds the 3DS example: what the editor will do.
+    needs: linux
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+      - name: Download the Linux release
+        uses: actions/download-artifact@v8
+        with:
+          name: tinygo${{ needs.linux.outputs.version }}.linux-amd64.tar.gz
+          path: /tmp/release
+          skip-decompress: true
+      - name: Build the 3DS example
+        run: |
+          tar -xzf /tmp/release/tinygo*.tar.gz -C /tmp
+          /tmp/tinygo/bin/tinygo version
+          cd src/examples/nintendo3ds-hello
+          GOFLAGS=-buildvcs=false /tmp/tinygo/bin/tinygo build -target=nintendo3ds -o /tmp/hello.3dsx .
+          ls -l /tmp/hello.3dsx
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15-intel]
+        include:
+          - os: macos-14
+            goarch: arm64
+          - os: macos-15-intel
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Dependencies
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install qemu binaryen
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Extract TinyGo version
+        id: version
+        run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: true
+      - name: Restore LLVM source cache
+        uses: actions/cache/restore@v5
+        id: cache-llvm-source
+        with:
+          key: llvm-source-22-${{ matrix.os }}-v1-${{ hashFiles('llvm-version.txt') }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save LLVM source cache
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore LLVM build cache
+        uses: actions/cache/restore@v5
+        id: cache-llvm-build
+        with:
+          key: llvm-build-22-${{ matrix.os }}-v1-${{ hashFiles('llvm-version.txt') }}
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # install dependencies
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install ninja
+          # build!
+          make llvm-build
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save LLVM build cache
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: make gen-device
+        run: make -j3 gen-device
+      - name: Build TinyGo release tarball
+        run: |
+          make release -j3
+          cp -p build/release.tar.gz build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
+      - name: Publish release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
+          path: build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
+          archive: false
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: MinoruSekine/setup-scoop@v4
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          scoop config use_external_7zip true
+          scoop install ninja binaryen
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Extract TinyGo version
+        id: version
+        shell: bash
+        run: ./.github/workflows/tinygo-extract-version.sh | tee -a "$GITHUB_OUTPUT"
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache: true
+      - name: Restore cached LLVM source
+        uses: actions/cache/restore@v5
+        id: cache-llvm-source
+        with:
+          key: llvm-source-22-windows-v3-${{ hashFiles('llvm-version.txt') }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Download LLVM source
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        run: make llvm-source
+      - name: Save cached LLVM source
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-source.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-source.outputs.cache-primary-key }}
+          path: |
+            llvm-project/clang/lib/Headers
+            llvm-project/clang/include
+            llvm-project/compiler-rt
+            llvm-project/lld/include
+            llvm-project/llvm/include
+      - name: Restore cached LLVM build
+        uses: actions/cache/restore@v5
+        id: cache-llvm-build
+        with:
+          key: llvm-build-22-windows-v1-${{ hashFiles('llvm-version.txt') }}
+          path: llvm-build
+      - name: Build LLVM
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          # fetch LLVM source
+          rm -rf llvm-project
+          make llvm-source
+          # build!
+          make llvm-build CCACHE=OFF
+          # Remove unnecessary object files (to reduce cache size).
+          find llvm-build -name CMakeFiles -prune -exec rm -r '{}' \;
+      - name: Save cached LLVM build
+        uses: actions/cache/save@v5
+        if: steps.cache-llvm-build.outputs.cache-hit != 'true'
+        with:
+          key: ${{ steps.cache-llvm-build.outputs.cache-primary-key }}
+          path: llvm-build
+      - name: Cache Go cache
+        uses: actions/cache@v5
+        with:
+          key: go-cache-windows-v3-${{ hashFiles('go.mod') }}
+          path: |
+            C:/Users/runneradmin/AppData/Local/go-build
+            C:/Users/runneradmin/go/pkg/mod
+      - name: make gen-device
+        run: make -j3 gen-device
+      - name: Build TinyGo release
+        shell: bash
+        run: make build/release -j4
+      - name: Make release artifact
+        shell: bash
+        working-directory: build/release
+        run: 7z -tzip a tinygo${{ steps.version.outputs.version }}.windows-amd64.zip tinygo
+      - name: Publish release artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinygo${{ steps.version.outputs.version }}.windows-amd64.zip
+          path: build/release/tinygo${{ steps.version.outputs.version }}.windows-amd64.zip
+          archive: false
+
+  release:
+    # Publishes what was built: a system whose build failed is left out, and the notes say so.
+    needs: [linux, check-3ds, macos, windows]
+    if: always() && needs.check-3ds.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Download the release files
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          skip-decompress: true
+      - name: Publish the prerelease
+        run: |
+          mkdir dist
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec mv {} dist/ \;
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo "TinyGo with the nintendo3ds target, built by this fork's own workflow."
+            echo "It needs devkitPro's 3DS packages (dkp-pacman -S 3ds-dev); \$DEVKITPRO says where they are."
+            echo
+            echo "Built: macOS ${{ needs.macos.result }}, Windows ${{ needs.windows.result }}; Linux checked with devkitPro's image."
+          } > ../notes.md
+          gh release create "$TAG" --prerelease --title "$TAG" --notes-file ../notes.md ./*

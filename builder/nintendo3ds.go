@@ -5,6 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+
+	"github.com/tinygo-org/tinygo/compileopts"
 )
 
 // makeNintendo3DSProgram turns an ELF file into a .3dsx program, the format the
@@ -25,11 +28,11 @@ func makeNintendo3DSProgram(elfPath, programPath string) error {
 }
 
 func find3dsxtool() (string, error) {
-	devkitPro := os.Getenv("DEVKITPRO")
-	if devkitPro == "" {
-		devkitPro = "/opt/devkitpro"
+	name := "3dsxtool"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
 	}
-	candidate := filepath.Join(devkitPro, "tools", "bin", "3dsxtool")
+	candidate := filepath.Join(compileopts.DevkitProFolder(), "tools", "bin", name)
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate, nil
 	}
